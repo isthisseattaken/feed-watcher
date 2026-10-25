@@ -266,15 +266,24 @@ def write_index(feed_cfg, entries):
   <title>{title}</title>
   <link rel="alternate" type="application/rss+xml" href="feed.xml">
   <style>
-    body {{ font: 16px/1.5 Georgia, serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; color: #222; background: #fbfaf7; }}
+    body {{ font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; color: #222; background: #fbfaf7; }}
     h1 {{ font-size: 1.6rem; margin-bottom: .2rem; }}
     p.meta {{ color: #777; margin-top: 0; }}
     ul {{ list-style: none; padding: 0; }}
     li {{ padding: .6rem 0; border-bottom: 1px solid #e6e2da; }}
     a {{ color: #1a4d6e; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
-    p.summary {{ margin: .25rem 0 .3rem; color: #555; font-size: .95rem; }}
-    span {{ display: block; font-size: .85rem; color: #888; }}
+    li > a {{ display: block; font-weight: 700; }}
+    p.summary {{ margin: .35rem 0 .25rem 1rem; padding-left: .75rem; border-left: 2px solid #e6e2da; color: #555; font-size: .95rem; }}
+    li > span {{ display: block; margin-left: 1.75rem; font-size: .85rem; color: #888; }}
+    /* Dark mode: turns on by itself when your device or browser is set to dark. */
+    @media (prefers-color-scheme: dark) {{
+      body {{ color: #e8e6e3; background: #1b1b1d; }}
+      p.meta, li > span {{ color: #8f8c87; }}
+      li {{ border-bottom-color: #33322f; }}
+      a {{ color: #8cb8e8; }}
+      p.summary {{ color: #b8b5b0; border-left-color: #45433f; }}
+    }}
   </style>
 </head>
 <body>
