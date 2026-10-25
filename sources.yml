@@ -4,10 +4,10 @@
 # ─────────────────────────────────────────────────────────────
 
 feed:
-  title: My Feed Watcher
+  title: what a ridiculous universe
   # Replace YOUR-USERNAME with your GitHub username (and the repo
   # name, if you didn't call it feed-watcher).
-  link: https://YOUR-USERNAME.github.io/feed-watcher/
+  link: https://isthisseattaken.github.io/feed-watcher/
   description: New items from the sources I follow, merged into one feed.
   max_items: 200        # how many recent items the feed keeps
 
