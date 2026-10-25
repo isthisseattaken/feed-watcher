@@ -115,17 +115,25 @@ def items_from_page(source, response):
     skips = source.get("skip_if_contains", []) or []
     strip_query = source.get("strip_query", True)
 
-    found = {}  # url -> best title
-    for a in links:
+    def article_url(a):
+        """The cleaned article address this link points to, or None if it isn't one."""
         href = a.get("href")
         if not href:
-            continue
+            return None
         url = clean_url(urljoin(response.url, href), strip_query)
         if starts and not url.startswith(starts):
-            continue
+            return None
         if url.rstrip("/") == starts.rstrip("/"):
-            continue                       # the listing page itself
+            return None                    # the listing page itself
         if any(s in url for s in skips):
+            return None
+        return url
+
+    found = {}      # url -> best title
+    summaries = {}  # url -> short description, when the page has one
+    for a in links:
+        url = article_url(a)
+        if not url:
             continue
         text = clean_text(a.get_text(" "))
         if text.lower().rstrip(" ›»>.") in GENERIC_TEXT:
@@ -136,8 +144,57 @@ def items_from_page(source, response):
             found[url] = text
         else:
             found.setdefault(url, "")
+        if url not in summaries:
+            summary = nearby_summary(a, url, article_url)
+            if summary:
+                summaries[url] = summary
 
-    return [{"link": url, "title": title or url} for url, title in found.items()]
+    items = []
+    for url, title in found.items():
+        summary = summaries.get(url, "")
+        if summary and title and summary.lower().startswith(title.lower()):
+            summary = ""                   # just the headline again
+        items.append({"link": url, "title": title or url, "summary": summary})
+    return items
+
+
+def nearby_summary(a, url, article_url):
+    """Find the short description that sits next to an article's link.
+
+    Climbs from the link to the box around it (an article "card"), stopping
+    as soon as a box holds links to more than one article, so a card never
+    borrows its neighbour's description.
+    """
+    box = a
+    for _ in range(5):
+        box = box.parent
+        if box is None or box.name in ("body", "html", "[document]"):
+            return ""
+        others = {article_url(x) for x in box.find_all("a")} - {None, url}
+        if others:
+            return ""
+        for el in box.find_all(["p", "div", "span"]):
+            if el.find(["p", "div", "h1", "h2", "h3", "h4"]):
+                continue                   # only innermost blocks of text
+            if el.find_parent("a") or el.find_parent(["h1", "h2", "h3", "h4"]):
+                continue                   # headlines and link text aren't descriptions
+            # Use the block's own words, leaving out any links inside it
+            # (like a trailing "Read the article ›").
+            words = [s for s in el.find_all(string=True) if not s.find_parent("a")]
+            text = clean_text(" ".join(words))
+            if len(text) >= 40:
+                return shorten(text)
+    return ""
+
+
+def shorten(text, limit=300):
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
+def html_to_text(fragment):
+    return clean_text(BeautifulSoup(fragment or "", "html.parser").get_text(" "))
 
 
 def items_from_feed(response):
@@ -148,8 +205,9 @@ def items_from_feed(response):
     for item in root.iter("item"):
         link = clean_text(item.findtext("link"))
         title = clean_text(item.findtext("title"))
+        summary = shorten(html_to_text(item.findtext("description")))
         if link:
-            items.append({"link": link, "title": title or link})
+            items.append({"link": link, "title": title or link, "summary": summary})
     # Atom
     atom = "{http://www.w3.org/2005/Atom}"
     for entry in root.iter(f"{atom}entry"):
@@ -158,8 +216,10 @@ def items_from_feed(response):
             link_el = entry.find(f"{atom}link")
         link = link_el.get("href") if link_el is not None else ""
         title = clean_text(entry.findtext(f"{atom}title"))
+        raw = entry.findtext(f"{atom}summary") or entry.findtext(f"{atom}content")
+        summary = shorten(html_to_text(raw))
         if link:
-            items.append({"link": link, "title": title or link})
+            items.append({"link": link, "title": title or link, "summary": summary})
     return items
 
 
@@ -179,7 +239,7 @@ def write_feed(feed_cfg, entries):
         ET.SubElement(item, "link").text = e["link"]
         ET.SubElement(item, "guid", isPermaLink="true").text = e["link"]
         ET.SubElement(item, "category").text = e["source"]
-        ET.SubElement(item, "description").text = f"From {e['source']}"
+        ET.SubElement(item, "description").text = e.get("summary") or f"From {e['source']}"
         first = datetime.fromisoformat(e["first_seen"])
         ET.SubElement(item, "pubDate").text = format_datetime(first)
 
@@ -189,11 +249,14 @@ def write_feed(feed_cfg, entries):
 
 
 def write_index(feed_cfg, entries):
-    rows = "\n".join(
-        f'      <li><a href="{html.escape(e["link"])}">{html.escape(e["title"])}</a>'
-        f' <span>{html.escape(e["source"])} · {e["first_seen"][:10]}</span></li>'
-        for e in entries[:50]
-    )
+    def row(e):
+        summary = e.get("summary") or ""
+        summary_html = f'\n        <p class="summary">{html.escape(summary)}</p>' if summary else ""
+        return (f'      <li>\n        <a href="{html.escape(e["link"])}">{html.escape(e["title"])}</a>'
+                f'{summary_html}\n'
+                f'        <span>{html.escape(e["source"])} · {e["first_seen"][:10]}</span>\n      </li>')
+
+    rows = "\n".join(row(e) for e in entries[:50])
     title = html.escape(feed_cfg.get("title", "Feed Watcher"))
     page = f"""<!doctype html>
 <html lang="en">
@@ -210,6 +273,7 @@ def write_index(feed_cfg, entries):
     li {{ padding: .6rem 0; border-bottom: 1px solid #e6e2da; }}
     a {{ color: #1a4d6e; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+    p.summary {{ margin: .25rem 0 .3rem; color: #555; font-size: .95rem; }}
     span {{ display: block; font-size: .85rem; color: #888; }}
   </style>
 </head>
@@ -259,8 +323,12 @@ def main():
                 # Upgrade a placeholder title if we now have a real one.
                 if seen[key]["title"] == key and item["title"] != key:
                     seen[key]["title"] = item["title"]
+                # Fill in a description for items saved before we had one.
+                if item.get("summary") and not seen[key].get("summary"):
+                    seen[key]["summary"] = item["summary"]
             else:
                 seen[key] = {"title": item["title"], "link": key, "source": label,
+                             "summary": item.get("summary", ""),
                              "first_seen": stamp, "last_seen": stamp}
                 added += 1
         new_count += added
