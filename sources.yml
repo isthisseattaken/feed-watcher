@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────
+#  Your feed watcher's settings. This is the only file you need
+#  to edit day to day. Lines starting with # are notes.
+# ─────────────────────────────────────────────────────────────
+
+feed:
+  title: My Feed Watcher
+  # Replace YOUR-USERNAME with your GitHub username (and the repo
+  # name, if you didn't call it feed-watcher).
+  link: https://YOUR-USERNAME.github.io/feed-watcher/
+  description: New items from the sources I follow, merged into one feed.
+  max_items: 200        # how many recent items the feed keeps
+
+sources:
+
+  # ── A page with no feed: the script reads the page and keeps
+  #    links that match the rules below.
+  - label: Current Affairs
+    type: page
+    url: https://www.currentaffairs.org/news
+    # Keep links whose address starts with this:
+    link_starts_with: https://www.currentaffairs.org/news/
+    # ...but skip any link containing one of these:
+    skip_if_contains:
+      - /news/tag/
+      - /news/author/
+      - /news/page/
+    # Optional: a CSS selector to only look inside part of the page,
+    # e.g. "main a" or ".post-listing a". Leave it out to search the
+    # whole page.
+    # selector: "main a"
+
+  # ── A site that already has a feed: just give its address.
+  # - label: Example Blog
+  #   type: feed
+  #   url: https://example.com/feed/
